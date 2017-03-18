@@ -1,0 +1,222 @@
+{% extends 'base.html'%}
+{%block cotent%}
+<div style="margin: 20px">
+	<h3>Top<span id="countDomain"></span> 域名排行榜<!-- （<a href="javascript:getTopData();">刷新</a> --></h3>
+    <p>
+        <span>
+            搜索：<input type="text" id="search_content" onkeypress="searchBykeypress();" />
+            <a href="javascript:void(0)" onclick="searchAction();">确定</a>
+        </span>
+        <span style="float: right;">
+            <a href="javascript:void(0)" onclick="indexPage();">首页</a>
+            <a href="javascript:void(0)" onclick="prePage();" id="prePage">上一页</a>
+            <a href="javascript:void(0)" onclick="nextPage();" id="nextPage">下一页</a>
+            <a href="javascript:void(0)" onclick="lastPage();">尾页</a>
+        </span>
+    </p>
+    <table class="table table-hover table-striped" id="topTable">
+        <thead>
+            <tr class="success">
+                <td>名称</td>
+                <td>链接</td>
+                <td>单次响应时长(秒)</td>
+                <td>1h平均响应时长(秒)</td>
+                <td>1h响应异常数</td>
+                <td>1h超时数</td>
+                <td>1d平均响应时长(秒)</td>
+                <td>1d响应异常数</td>
+                <td>1d超时数</td>
+            </tr>
+        </thead>
+        <tbody id="tbody">
+        	<tr>
+        		<td>百度</td><td>www.baidu.com</td><td>0.344</td><td>0.287</td><td>0.561</td>
+        	</tr>
+        	<tr>
+        		<td>爱奇艺</td><td>www.aqiyi.com</td><td>3.665</td><td>2.987</td><td>4.261</td>
+			</tr>
+			<tr>
+        		<td>淘宝</td><td>www.taobao.com</td><td>2.981</td><td>2.115</td><td>3.221</td>
+        	</tr>
+        	<tr>
+        		<td>新浪</td><td>www.sina.com.cn</td><td>2.777</td><td>3.098</td><td>2.984</td>
+        	</tr>
+        </tbody>
+    </table>
+</div>
+<link rel="stylesheet" href="/static/tablesorter/theme.blue.css">
+<script src="/static/tablesorter/jquery.tablesorter.js"></script>
+<script type="text/javascript">    
+    var cur_page=0;
+    var size_page=15;
+	$(function(){
+		//获取top排行榜数据
+        var url="/getTopData/"+cur_page+"/"+size_page;
+		getTopData(url);
+		$("#prePage").hide();
+        $("#nextPage").hide();
+    })
+
+    function searchBykeypress()
+    {
+        //回车搜索
+        if(event.keyCode==13) 
+        {
+            searchAction();
+        }
+    }
+
+    function searchAction()
+    {
+        //搜索
+        var content=$("#search_content").val().trim();
+
+        var url="/getTopData/"+cur_page+"/"+size_page;
+        if(content.length>0)
+        {
+            var url="/searchTopData/"+content;
+        }
+        getTopData(url);
+    }
+
+    function indexPage()
+    {
+        //首页
+        var url="/getTopData/0/"+size_page;
+        getTopData(url);
+    }
+
+    function lastPage()
+    {
+        //尾页
+        var url="/getTopData/100/"+size_page;
+        getTopData(url);
+    }
+
+    function prePage()
+    {
+        //上一页
+        var index=cur_page-1;
+        var url="/getTopData/"+index+"/"+size_page;
+        getTopData(url);
+    }
+
+    function nextPage()
+    {
+        //下一页
+        var index=cur_page+1;
+        var url="/getTopData/"+index+"/"+size_page;
+        getTopData(url);
+    }
+
+    function getTopData(data_url)
+    {
+        //域名数据
+        $("#topTable").trigger("destroy");
+    	$("#tbody").empty().append("数据加载中...")
+    	data="{}"
+    	$.ajax({
+            dataType:'text',
+            type: "get",
+            timeout: 0, //超时时间：30秒
+            url:data_url,
+            success: function(result){
+                //console.info(result);
+                var obj = eval('(' + result + ')');
+                console.info(obj)
+                var html="";
+                if(obj.isOK=='1')
+                {
+                    if(obj.hasOwnProperty("max_count"))
+                    {
+                        //域名总数
+                    	count=obj.max_count
+                    	$("#countDomain").empty().html(count)
+                    }
+
+                    if(obj.hasOwnProperty("index"))
+                    {
+                        //最小页码
+                        min_page=obj.min_page
+                        //最大页码
+                        max_page=obj.max_page
+                        //当前页码
+                        cur_page=obj.index
+
+                        $("#prePage").show();
+                        $("#nextPage").show();
+                        if(cur_page>=max_page)
+                        {
+                            $("#nextPage").hide();
+                        }
+                        else if(cur_page<=min_page)
+                        {
+                            $("#prePage").hide();
+                        }
+                    }
+                    else{                        
+                        $("#nextPage").hide();
+                        $("#prePage").hide();
+                    }
+
+                	$.each(obj.data,function(n,item) {
+
+                        if(item.url.indexOf("http")==0)
+                        {
+                            url=item.url;
+                        }
+                        else
+                        {
+                            url="http://"+item.url;
+                        }
+                		//console.info(item.id);
+
+                        var class_httpCodeError_hour='';
+                        if(item.count_httpCodeError_hour>0)
+                        {
+                            class_httpCodeError_hour="class='danger'";
+                        }
+                        var class_timeout_hour='';
+                        if(item.count_timeout_hour>0)
+                        {
+                            class_timeout_hour="class='danger'";
+                        }
+
+                        var class_httpCodeError_day='';
+                        if(item.count_httpCodeError_day>0)
+                        {
+                            class_httpCodeError_day="class='danger'";
+                        }
+                        var class_timeout_day='';
+                        if(item.count_timeout_day>0)
+                        {
+                            class_timeout_day="class='danger'";
+                        }
+
+                        var class_lately='';
+                        if(item.lately=="超时")
+                        {
+                            class_lately="class='danger'";
+                        }
+					    html+="<tr><td><a href='/getDomainDetail/"+item.id+"' target='_blank'>"+item.name+"</a></td>"+
+					    "<td  width='100px'><a href='"+url+"'' target='_blank'>"+item.url+"</a></td>"+
+					    "<td "+class_lately+">"+item.lately+"</td>"+
+					    "<td>"+item.hour+"</td>"+
+                        "<td "+class_httpCodeError_hour+">"+item.count_httpCodeError_hour+"</td>"+
+                        "<td "+class_timeout_hour+">"+item.count_timeout_hour+"</td>"+
+					    "<td>"+item.day+"</td>"+
+                        "<td "+class_httpCodeError_day+">"+item.count_httpCodeError_day+"</td>"+
+                        "<td "+class_timeout_day+">"+item.count_timeout_day+"</td></tr>"
+					});
+
+
+                }
+                $("#tbody").empty().append(html);
+                $("#topTable").tablesorter({
+				    theme : 'blue'
+				});  
+            }
+        });
+    }
+</script>
+{%endblock%}

@@ -1,0 +1,615 @@
+{% extends 'base.html'%}
+{%block cotent%}
+<link rel="stylesheet" href="/static/tablesorter/theme.blue.css">
+<script src="/static/tablesorter/jquery.tablesorter.js"></script>
+<style type="text/css">
+    hr{padding: 0px;margin: 0px;border-color: #666}
+    .warning{color: #f00}
+</style>
+<div style="margin: 20px 20px;width: 100%">
+    <span style="font-size: 14px;margin: 10px"><a href="/domain" target="blank">首页</a>>>{{domain.name}}_<span id="url"></span>
+    <hr/>
+    <div style="margin: 20px auto;text-align: center;">响应状态趋势</div>
+    <div id="container_status" style="height: 300px; min-width: 310px;width: 99%">        
+    </div>
+    <div style="margin: 0px 10px 0px 10px" id="error_div">
+        状态异常列表(<span id="error_count"></span>)
+        <table class="table table-hover table-striped" id="error_status_table">
+            <thead>
+                <tr class="success">
+                    <td>目标ip</td><td>ip归属地</td><td>状态</td><td>时间</td>
+                </tr>
+            </thead>
+            <tbody id="error_status_tbody">
+                
+            </tbody>
+        </table>
+    </div>
+
+    <hr style="margin-top: 120px" />
+    <div style="margin: 20px auto;text-align: center;">响应时长趋势</div>
+    <div id="container_time" style="height: 400px; min-width: 310px;width: 99%"></div>
+
+    <div style="float: left;width: 48%;margin: 0px 10px 0px 10px">
+        最快ip列表
+        <table class="table table-hover table-striped" id="fastest_table">
+            <thead>
+                <tr class="success">
+                    <td>目标ip</td><td>ip归属地</td><td>平均访问时长（秒）</td><td>平均下载速度(KB/s)</td><td>占比</td>
+                    <td>上次时间</td>
+                </tr>
+            </thead>
+            <tbody id="fastest_ip_tbody">
+                
+            </tbody>
+        </table>
+    </div>
+    <div style="float: left;width: 48%">
+        最慢ip列表
+        <table class="table table-hover table-striped" id="slowest_table">
+            <thead>
+                <tr class="success">
+                    <td>目标ip</td><td>ip归属地</td><td>平均访问时长（秒）</td><td>平均下载速度(KB/s)</td><td>占比</td>
+                    <td>上次时间</td>
+                </tr>
+            </thead>
+            <tbody id="slowest_ip_tbody">
+                
+            </tbody>
+        </table>
+    </div>
+    <div style="clear: both;"></div>
+</div>
+<script src="/static/highstock/highstock.js"></script>
+<script src="/static/highstock/modules/exporting.js"></script>
+
+<script type="text/javascript">
+
+function getStatusData()
+{    
+    var series_status=[];
+    function createStatusChart(){
+        Highcharts.stockChart('container_status', {
+                
+            //左上选项
+            rangeSelector: {
+                buttons: [
+                {
+                    type:'hour',
+                    count:1,
+                    text:'时'
+                },
+                {
+                    type:'day',
+                    count:1,
+                    text:'天'
+                },
+                /*{
+                    type: 'day',
+                    count: 7,
+                    text: '周'
+                }*/
+                {
+                    type: 'all',
+                    text: '所有'
+                }],
+                inputEnabled: false // 不显示日期输入框
+            },
+
+            xAxis: {
+                //title: {
+                //    text:'数据采集时间(年/月/日 小时:分钟)',
+                //},
+                type:"datetime",//时间轴要加上这个type，默认是linear
+                maxPadding : 0.05,
+                minPadding : 0.01,
+                //tickInterval : 24 * 3600 * 1000 * 2,//两天画一个x刻度
+                                //或者150px画一个x刻度，如果跟上面那个一起设置了，则以最大的间隔为准
+                tickPixelInterval : 500,
+                tickWidth:2,//刻度的宽度
+                lineColor : '#999',//自定义刻度颜色
+                lineWidth :1,//自定义x轴宽度
+                gridLineWidth :1,//默认是0，即在图上没有纵轴间隔线
+                //自定义x刻度上显示的时间格式，根据间隔大小，以下面预设的小时/分钟/日的格式来显示
+                dateTimeLabelFormats:
+                {
+                    second: '%m-%d %H:%M:%S',
+                    minute: '%m-%d %H:%M',
+                    hour: '%m-%d %H:%M',
+                    day: '%m-%d',
+                    week: '%m-%d',
+                    month: '%Y-%m',
+                    year: '%Y'
+                }
+            },
+
+            yAxis: {
+                title: {
+                    text:'响应状态码',
+                },
+                
+                min: -2,
+                startOnTick: false,
+                maxTickInterval: 600,
+                minTickInterval: 1,
+                allowDecimals: false,
+                //minPadding:0.001,
+                //maxPadding:0.01,
+                color: 'red',
+                tickPixelInterval : 100,
+            },
+
+            tooltip: {
+                pointFormatter: function() {
+
+                    var data=this.series.options.data;
+                    //console.info(data);
+                    var ip=data[this.index][2]
+                    var address=data[this.index][3]
+                    return ''+this.series.name+' '+this.y+"<br/>ip："+ip+"<br/>归属地："+address
+                },
+               /*pointFormatter: '{}<span style="color:{series.color}">{series.name}</span>: <b>{point.y}</b> ({point.change}%)<br/>',*/      
+                split: true,
+                dateTimeLabelFormats:
+                {
+                    second: '%m-%d %H:%M:%S',
+                    minute: '%m-%d %H:%M',
+                    hour: '%m-%d %H:%M',
+                    day: '%m-%d',
+                    week: '%m-%d',
+                    month: '%Y-%m',
+                    year: '%Y'
+                }
+            },
+
+            series: series_status
+        });
+    }
+
+
+    $("#error_status_table").trigger("destroy");
+    $.getJSON('/getDomainStatusData/' + {{domain.id}}, function (data) {
+
+        console.info("____________________getDomainStatusData");        
+        console.info(data);
+        if(data.isOk=='1')
+        {
+            var d=new Date();
+            var localOffset=d.getTimezoneOffset()*60000; 
+            console.info(localOffset);
+            var data_status=new Array();
+            var html="";
+            var error_count=0;
+            $.each(data.json, function (i, data) {
+                var dataObj=eval("("+data+")");
+                var timestamp = Date.parse(dataObj.create_time)-localOffset;
+                var http_code=parseFloat(dataObj.http_code);
+                var ip=dataObj.ipaddr__ip;
+                var ip_address=dataObj.ipaddr__address;
+                data_status[i]=[timestamp,http_code,ip,ip_address];
+                //data_status[i]=[1481039108000,i];
+                //console.info(i);
+                //console.info(http_code+"|"+timestamp+"|"+ip);
+                var error=(dataObj.http_code.indexOf("5")==0
+                    ||dataObj.http_code.indexOf("4")==0
+                    ||dataObj.http_code.indexOf("-1")==0)
+                if(error)
+                {
+                    if(dataObj.http_code.indexOf("-1")==0)
+                    {
+                        http_code="不可访问"
+                    }
+                    html="<tr><td>"+ip+"</td><td>"+ip_address+"</td><td>"+http_code+"</td><td>"+dataObj.create_time+"</td></tr>"+html;
+                    error_count+=1;
+                }   
+
+            });
+            //console.info(data_status);
+            series_status[0]={
+                name: '响应状态',
+                data: data_status
+            }
+            createStatusChart();
+            $("#error_status_tbody").empty().html(html);
+            $("#error_status_table").tablesorter({
+                    theme : 'blue'
+            }); 
+
+            if(error_count==0)
+            {
+                $("#error_div").hide();
+            }
+            else
+            {
+                $("#error_count").empty().html("异常总量："+error_count);
+            }
+        }
+
+        getTimeData();
+    });
+}
+
+function getTimeData()
+{   
+
+    var seriesOptions = [];
+    var names = ['slowest', 'fastest'];//['MSFT', 'AAPL', 'GOOG'];//
+
+    function createTimeChart() {
+
+        Highcharts.stockChart('container_time', {
+
+            //左上选项
+            rangeSelector: {
+                buttons: [
+                {
+                    type:'hour',
+                    count:1,
+                    text:'时'
+                },
+                {
+                    type:'day',
+                    count:1,
+                    text:'天'
+                },
+                /*{
+                    type: 'day',
+                    count: 7,
+                    text: '周'
+                }*/ 
+                {
+                    type: 'all',
+                    text: '所有'
+                }],
+                inputEnabled: false // 不显示日期输入框
+            },
+
+            xAxis: {
+                //title: {
+                //    text:'数据采集时间(年/月/日 小时:分钟)',
+                //},
+                type:"datetime",//时间轴要加上这个type，默认是linear
+                maxPadding : 0.05,
+                minPadding : 0.01,
+                //tickInterval : 24 * 3600 * 1000 * 2,//两天画一个x刻度
+                                //或者150px画一个x刻度，如果跟上面那个一起设置了，则以最大的间隔为准
+                tickPixelInterval : 500,
+                tickWidth:2,//刻度的宽度
+                lineColor : '#999',//自定义刻度颜色
+                lineWidth :1,//自定义x轴宽度
+                gridLineWidth :1,//默认是0，即在图上没有纵轴间隔线
+                //自定义x刻度上显示的时间格式，根据间隔大小，以下面预设的小时/分钟/日的格式来显示
+                dateTimeLabelFormats:
+                {
+                    second: '%m-%d %H:%M:%S',
+                    minute: '%m-%d %H:%M',
+                    hour: '%m-%d %H:%M',
+                    day: '%m-%d %H:%M',
+                    week: '%m-%d %H:%M',
+                    month: '%Y-%m %H:%M',
+                    year: '%Y'
+                }
+            },
+
+            yAxis: {
+                title: {
+                    text:'响应时长(单位:秒)',
+                },
+                labels: {
+                    formatter: function () {
+                        return (this.value > 0 ? ' ' : '') + this.value + 's';
+                    }
+                },
+                min: -2,
+                startOnTick: false,
+                maxTickInterval: 120,
+                minTickInterval: 1,
+                allowDecimals: true,
+                //minPadding:0.001,
+                //maxPadding:0.01,
+                tickPixelInterval : 5,
+                plotLines: [{
+                    value: 0,
+                    width: 1,
+                    color: 'silver'
+                }]
+            },
+
+            valueDecimals: 3,//保留3位小数
+            plotOptions: {
+                series: {
+                    //compare: 'percent',
+                    //showInNavigator: true
+                }
+            },
+
+            tooltip: {
+                pointFormatter: function() {
+
+                    var data=this.series.options.data;
+                    var ip=data[this.index][2]
+                    var address=data[this.index][3]
+                    var size=data[this.index][4].toFixed(2)
+                    var speed=data[this.index][5].toFixed(2)
+                    var redirect=data[this.index][6]
+                    var second=parseFloat(this.y).toFixed(2)
+                    var info=''+this.series.name+' '+second+"秒 <br/>内容："+size+"KB 速度："+speed+"KB/s 跳转："+redirect+"次"+"<br/>ip："+ip+"归属地："+address;
+                    return info
+                },
+                /*pointFormatter: '{}<span style="color:{series.color}">{series.name}</span>: <b>{point.y}</b> ({point.change}%)<br/>',*/             
+                valueDecimals: 3,//保留3位小数
+                split: true,
+                dateTimeLabelFormats:
+                {
+                    second: '%m-%d %H:%M:%S',
+                    minute: '%m-%d %H:%M',
+                    hour: '%m-%d %H:%M',
+                    day: '%m-%d %H:%M',
+                    week: '%m-%d %H:%M',
+                    month: '%Y-%m',
+                    year: '%Y'
+                }
+            },
+
+            series: seriesOptions
+        });
+    }
+
+
+    $("#fastest_table").trigger("destroy");
+    $("#slowest_table").trigger("destroy");
+    $.getJSON('/getDomainTimeData/' + {{domain.id}},    function (data) {
+            console.info("____________________getDomainTimeData");
+            //console.info(data);
+            if(data.isOk=='1')
+            {   
+                var slowest_data=new Array();
+                var fastest_data=new Array();
+
+                var d=new Date();
+                var localOffset=d.getTimezoneOffset()*60000; 
+                var slowest_obj=new Object();
+                var fastest_obj=new Object();
+                var length=data.json.length;
+                //console.info(length)
+
+                $.each(data.json, function (i, data) {
+                    var dataObj=eval("("+data+")");
+                    var slowest_ip=dataObj.slowest_ip__ip
+                    var slowest_ip_address=dataObj.slowest_ip__address
+                    var slowest_time=parseFloat(dataObj.slowest_time)
+                    var slowest_size=parseFloat(dataObj.slowest_size)*0.001
+                    var slowest_speed=parseFloat(dataObj.slowest_speed)*0.001
+                    var slowest_redirect=dataObj.slowest_redirect
+
+                    //console.info(dataObj);
+                    if(slowest_time>0)
+                    {
+                        var key_ip="ip:"+slowest_ip
+                        var key_addr="address_"+key_ip
+                        var key_total_time="tottime_"+key_ip
+                        var key_speed="speed_"+key_ip
+                        var key_time="time_"+key_ip
+
+                        //ip
+                        if(slowest_obj[key_ip]==undefined)
+                        {
+                            slowest_obj[key_ip]=1
+                        }
+                        else
+                        {
+                            slowest_obj[key_ip]=slowest_obj[key_ip]+1
+                        }
+                        //归属地
+                        slowest_obj[key_addr]=slowest_ip_address
+                        //响应时长
+                        if(slowest_obj[key_total_time]==undefined)
+                        {
+                            slowest_obj[key_total_time]=slowest_time  
+                        }
+                        else
+                        {
+                            slowest_obj[key_total_time]=slowest_obj[key_total_time]+slowest_time
+                        }
+                        //速度
+                        if(slowest_obj[key_speed]==undefined)
+                        {
+                            slowest_obj[key_speed]=slowest_speed
+                        }
+                        else
+                        {
+                            slowest_obj[key_speed]=slowest_obj[key_speed]+slowest_speed
+                        }
+                        //时间
+                        slowest_obj[key_time]=dataObj.create_time
+                        /*if(slowest_obj[key_time]==undefined)
+                        {
+                            slowest_obj[key_time]=dataObj.create_time
+                        }*/
+                    }
+
+                    var fastest_ip=dataObj.fastest_ip__ip
+                    var fastest_ip_address=dataObj.fastest_ip__address
+                    var fastest_time=parseFloat(dataObj.fastest_time)
+                    var fastest_size=parseFloat(dataObj.fastest_size)*0.001
+                    var fastest_speed=parseFloat(dataObj.fastest_speed)*0.001
+                    var fastest_redirect=dataObj.fastest_redirect
+
+                    if(fastest_time>0)
+                    {
+                        var key_ip="ip:"+fastest_ip
+                        var key_addr="address_"+key_ip
+                        var key_total_time="tottime_"+key_ip
+                        var key_speed="speed_"+key_ip
+                        var key_time="time_"+key_ip
+
+                        //ip
+                        if(fastest_obj[key_ip]==undefined)
+                        {
+                            fastest_obj[key_ip]=1
+                        }
+                        else
+                        {
+                            fastest_obj[key_ip]=fastest_obj[key_ip]+1
+                        }
+                        //归属地
+                        fastest_obj[key_addr]=fastest_ip_address   
+                        //响应时长                 
+                        if(fastest_obj[key_total_time]==undefined)
+                        {
+                            fastest_obj[key_total_time]=fastest_time   
+                        }
+                        else
+                        {
+                            fastest_obj[key_total_time]=fastest_obj[key_total_time]+fastest_time
+                        }
+                        //速度
+                        if(fastest_obj[key_speed]==undefined)
+                        {
+                            fastest_obj[key_speed]=fastest_speed
+                        }
+                        else
+                        {
+                            fastest_obj[key_speed]=fastest_obj[key_speed]+fastest_speed
+                        }
+                        //时间
+                        fastest_obj[key_time]=dataObj.create_time
+                        /*if(fastest_obj[key_time]==undefined)
+                        {
+                            fastest_obj[key_time]=dataObj.create_time
+                        }*/
+                    }
+
+
+                    var timestamp = Date.parse(dataObj.create_time)-localOffset;
+                    slowest_data[i]=[timestamp,slowest_time,
+                    slowest_ip,slowest_ip_address,slowest_size,slowest_speed,slowest_redirect]
+                    fastest_data[i]=[timestamp,fastest_time,
+                    fastest_ip,fastest_ip_address,fastest_size,fastest_speed,fastest_redirect]
+                    //console.info(timestamp+"|"+dataObj.slowest_time+"|"+dataObj.fastest_time)
+                });
+
+                seriesOptions[0] = {
+                    name: "slowest",
+                    //step:true,                    
+                    marker : {
+                        enabled : true,
+                    },
+                    data: slowest_data
+                };
+
+                seriesOptions[1] = {
+                    name: "fastest",
+                    //step:true,
+                    marker : {
+                        enabled : true,
+                    },
+                    data: fastest_data
+                };
+
+                //console.info(seriesOptions)
+                createTimeChart();
+
+                //最慢ip
+                var count=0;
+                var slowest_ip="";
+                var slowest_ip_address="";
+                var total_time=0;
+                var total_speed=0;
+                var html_ip_tbody="";
+                $.each(slowest_obj,function(key,value)
+                {
+                    //console.info(key+","+value);
+                    //console.info(key.indexOf("ip")>=0)
+                    if(String(key).indexOf("ip")==0)
+                    {
+                        slowest_ip=key
+                        slowest_ip_address=slowest_obj["address_"+key]
+                        count=value
+                        total_time=slowest_obj["tottime_"+key]
+                        console.info(count+"|"+length)
+
+                        var average_time=(total_time/count).toFixed(3)
+                        var percent=(count/length*100).toFixed(1)
+                        total_speed=slowest_obj["speed_"+key]
+                        var average_speed=(total_speed/count).toFixed(2)
+                        //console.info("==="+slowest_ip+","+slowest_ip_address+","+average_time+","+count);
+                        var time=slowest_obj["time_"+key]
+                        html_ip_tbody+="<tr>"+
+                        "<td>"+slowest_ip+"</td>"+
+                        "<td>"+slowest_ip_address+"</td>"+
+                        "<td>"+average_time+"</td>"+
+                        "<td>"+average_speed+"</td>"+                        
+                        "<td>"+percent+"%</td>"+
+                        "<td>"+time+"</td></tr>"
+                    }
+                });
+                //console.info(html_ip_tbody);
+                $("#slowest_ip_tbody").empty().html(html_ip_tbody);
+                $("#slowest_table").tablesorter({
+                    theme : 'blue'
+                });  
+
+                //最快ip
+                count=0;
+                total_time=0;
+                html_ip_tbody=""
+                var fastest_ip="";
+                var fastest_ip_address="";
+                $.each(fastest_obj,function(key,value)
+                {
+                    //console.info(key+","+value);
+                    //console.info(key.indexOf("ip")>=0)
+                    if(String(key).indexOf("ip")==0)
+                    {
+                        fastest_ip=key
+                        fastest_ip_address=fastest_obj["address_"+key]
+                        count=value
+                        total_time=fastest_obj["tottime_"+key]
+                        console.info(count+"|"+length)
+
+                        average_time=(total_time/count).toFixed(3)
+                        percent=(count/length*100).toFixed(1)
+                        total_speed=fastest_obj["speed_"+key]
+                        var average_speed=(total_speed/count).toFixed(2)
+                        var time=fastest_obj["time_"+key]
+                        //console.info("==="+fastest_ip+","+fastest_ip_address+","+(total_time/count).toFixed(3)+","+count);
+                        html_ip_tbody+="<tr>"+
+                        "<td>"+fastest_ip+"</td>"+
+                        "<td>"+fastest_ip_address+"</td>"+
+                        "<td>"+average_time+"</td>"+
+                        "<td>"+average_speed+"</td>"+   
+                        "<td>"+percent+"%</td>"+
+                        "<td>"+time+"</td></tr>"
+                    }
+                });
+                //console.info(html_ip_tbody);
+                $("#fastest_ip_tbody").empty().html(html_ip_tbody);
+
+                $("#fastest_table").tablesorter({
+                    theme : 'blue'
+                });  
+                //console.info(slowest_data);
+                //console.info(fastest_data);
+                
+            }
+    });
+}
+
+$(function () {
+    getStatusData();
+
+    var url="{{domain.url}}";
+    if(url.indexOf("http")==0)
+    {
+        url=url;
+    }
+    else
+    {
+        url="http://"+url;
+    }
+    url="<a href="+url+" target='_blank'>"+url+"</a>"
+    $("#url").empty().html(url);
+});
+</script>
+{%endblock%}

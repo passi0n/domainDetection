@@ -1,0 +1,237 @@
+from django.shortcuts import render
+
+# Create your views here.
+
+from django.shortcuts import render_to_response
+from django.template import RequestContext
+from django.http import HttpResponse, Http404, HttpResponseRedirect
+from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.gzip import gzip_page
+
+from domain.models import domain as Domain, result as Result, responseTime as ResponseTime, \
+    responseStatus as ResponseStatus
+from datetime import datetime, timedelta
+import json
+from django.core.cache import cache
+from monitor import settings
+
+
+def index(request):
+    # 首页
+    try:
+        params = {}
+        return render_to_response('index.html', params, RequestContext(request))
+    except Exception as e:
+        print(e.args)
+        raise Http404("")
+
+
+@gzip_page
+def getTopData(request):
+    # 排行榜数据
+    result = {}
+    try:
+        # 获取缓存数据
+        cache_key = "domain_top"
+        cache_data = cache.get(cache_key, None)
+        if cache_data:
+            result = cache_data
+        else:
+            time_start = datetime.now()
+
+            domains = Domain.objects.all()
+            data = []
+            time_out = -1
+            for domain in domains:
+                id_domain = domain.id
+                url_domain = domain.url
+                name_domain = domain.name
+                print("%3s %10s %50s" % (id_domain, name_domain, url_domain))
+
+                # 最近1天平均时间
+                totay_lately = datetime.now() - timedelta(days=1)
+                results_day = Result.objects.filter(domain=domain, create_time__gte=totay_lately).values_list(
+                    "total_time", flat=True).exclude(
+                    total_time="%s" % time_out).order_by("-create_time").all()
+
+                '''
+                time_offset = datetime.now() - time_start
+                print("results_day:" + str(time_offset.microseconds))
+                time_start = datetime.now()
+                '''
+
+                count_timeout_day = Result.objects.filter(domain=domain, create_time__gte=totay_lately,
+                                                          total_time="%s" % time_out).values("id").order_by(
+                    "-create_time").count()
+                '''
+                time_offset = datetime.now() - time_start
+                print("count_timeout_day:" + str(time_offset.microseconds))
+                time_start = datetime.now()
+                '''
+
+                aver_day = getAverTimeByResults(results_day)
+                #print("result_day:%5s" % aver_day)
+
+                '''
+                time_offset = datetime.now() - time_start
+                print("aver_day:" + str(time_offset.microseconds))
+                time_start = datetime.now()
+                '''
+
+                # 最近1小时平均时间
+                hour_lately = datetime.now() - timedelta(hours=1)
+                results_hour = results_day.filter(create_time__gte=hour_lately).all()
+
+                count_timeout_hour = Result.objects.filter(domain=domain, create_time__gte=hour_lately,
+                                                           total_time="%s" % time_out).values("id").order_by(
+                    "-create_time").count()
+
+                aver_hour = getAverTimeByResults(results_hour)
+                #print("aver_hour:%5s" % aver_hour)
+
+                # 最近响应时间
+                try:
+                    result_lately = results_hour[0]
+                    if float(result_lately) == time_out:
+                        result_lately = "超时"
+                except Exception as e:
+                    result_lately = "异常"
+                #print("result_lately:%5s" % result_lately)
+
+                '''
+                time_offset = datetime.now() - time_start
+                print("offset_time2:" + str(time_offset.microseconds))
+                time_offset = datetime.now() - time_start
+                '''
+                item = {"id": id_domain,
+                        "url": url_domain,
+                        "name": name_domain,
+                        "lately": result_lately,
+                        "hour": aver_hour,
+                        "count_timeout_hour": count_timeout_hour,
+                        "day": aver_day,
+                        "count_timeout_day": count_timeout_day}
+                data.append(item)
+
+            time_offset = datetime.now() - time_start
+            print(time_offset.microseconds)
+            print(time_offset.seconds)
+
+            result = {"isOK": "1",
+                      "time": time_offset.seconds,
+                      "data": data}
+            cache.set(cache_key, result, settings.cache_time)
+    except Exception as e:
+        print(e.args)
+        result = {"isOK": "0",
+                  "info": str(e.args)}
+    finally:
+        str_result = json.dumps(result)
+        response = HttpResponse(status=200)
+        response.write(str_result)
+        return response
+
+
+def getAverTimeByResults(results):
+    # 平均时间
+    total_time = 0
+
+    #list = [result.total_time for result in results]
+    count = len(results)
+    if count > 0:
+        total_time = sum(results)
+    """
+    count = len(results)
+    #print(count)
+    if results is None or count == 0:
+        return 0
+    for result in results:
+        total_time += float(result["total_time"])
+    """
+    return "%.3f" % (total_time / count)
+
+
+@gzip_page
+def getDomainDetail(request, id):
+    # 域名详细页面
+    try:
+        domain = Domain.objects.get(id=id)
+        # ips=Result.objects.filter(domain__id=id).values("ipaddr").distinct()
+        # print(ips)
+        params = {"domain": domain}
+        return render_to_response('domainDetail.html', params, RequestContext(request))
+    except Exception as e:
+        print(e.args)
+        raise Http404("")
+
+
+from django.forms.models import model_to_dict
+
+
+@gzip_page
+def getDomainTimeData(request, id):
+    # 域名响应时间
+    try:
+        # 获取缓存数据
+        cache_key = "domain_time_%s" % id
+        cache_data = cache.get(cache_key, None)
+        if cache_data:
+            param = cache_data
+        else:
+            domain = Domain.objects.get(id=id)
+            # 最近3天时间
+            totay_lately = datetime.now() - timedelta(days=2)
+            responseTimes = ResponseTime.objects.filter(domain=domain, create_time__gte=totay_lately).order_by(
+                "create_time").all()
+            list = []
+            for item in responseTimes:
+                list.append(item.toJSON())
+            param = {"json": list,
+                     "isOk": 1}
+            cache.set(cache_key, param, settings.cache_time)
+    except Exception as e:
+        print(e.args)
+        param = {"error": e.args,
+                 "isOk": 0}
+    finally:
+        json_str = json.dumps(param)
+        response = HttpResponse(status=200)
+        response.write(json_str)
+        return response
+
+
+@gzip_page
+def getDomainStatusData(request, id):
+    # 域名状态数据
+    try:
+        cache_key = "domain_status_%s" % id
+        cache_data = cache.get(cache_key, None)
+        if cache_data:
+            param = cache_data
+        else:
+            domain = Domain.objects.get(id=id)
+            # 最近3天时间
+            totay_lately = datetime.now() - timedelta(days=2)
+            responseStatuss = ResponseStatus.objects.filter(domain=domain, create_time__gte=totay_lately).order_by(
+                "create_time").all()
+            list = []
+            for item in responseStatuss:
+                list.append(item.toJSON())
+            param = {"json": list,
+                     "isOk": 1}
+            cache.set(cache_key, param, settings.cache_time)
+    except Exception as e:
+        print(e.args)
+        param = {"error": e.args,
+                 "isOk": 0}
+    finally:
+        json_str = json.dumps(param)
+        response = HttpResponse(status=200)
+        response.write(json_str)
+        return response
+
+
+def getIP(request):
+    '''识别广电私有IP'''
+    ip = request.META.get('REMOTE_ADDR', '对不起，获取不到你的IP')
+    return HttpResponse("您的IP是: %s" % ip)
